@@ -34,9 +34,9 @@ def evaluate_ood(model, distortion_name, severity, CONFIG):
         pin_memory=True)
 
     # Normalize after converting to tensor
-    #normalize = transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))
+    normalize = transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))
     #Ajdusted to fit ImageNet Weights
-    normalize = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+   #normalize = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
 
     
     predictions = []  # Store predictions
