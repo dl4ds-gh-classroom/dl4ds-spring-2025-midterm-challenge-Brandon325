@@ -220,6 +220,7 @@ def main():
             wandb.save("best_model.pth")
 
     wandb.finish()
+    model.load_state_dict(torch.load("best_model.pth"))
 
     ############################################################################
     # Evaluation: Clean CIFAR-100 Test Set and OOD Evaluation
@@ -232,7 +233,7 @@ def main():
 
     all_predictions = eval_ood.evaluate_ood_test(model, CONFIG)
     submission_df_ood = eval_ood.create_ood_df(all_predictions)
-    submission_df_ood.to_csv("submission_ood_p3.csv", index=False)
+    submission_df_ood.to_csv("submission_ood_p3v2.csv", index=False)
     print("submission_ood_p3.csv created successfully.")
 
 if __name__ == '__main__':
