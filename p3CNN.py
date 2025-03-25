@@ -216,8 +216,8 @@ def main():
         # Save the best model based on validation accuracy
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            torch.save(model.state_dict(), "best_model_part3.pth")
-            wandb.save("best_model_part3.pth")
+            torch.save(model.state_dict(), "best_model.pth")
+            wandb.save("best_model.pth")
 
     wandb.finish()
 

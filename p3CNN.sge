@@ -1,0 +1,17 @@
+#!/bin/bash
+#$ -cwd
+#$ -N p3cnn_job
+#$ -o logs/p3cnn_output.log
+#$ -e logs/p3cnn_error.log
+#$ -l h_rt=02:00:00
+#$ -l gpus=1
+#$ -l gpu_type=V100
+#$ -pe omp 4
+#$ -m abe
+#$ -M your_email@bu.edu  # Replace with your email or delete this line
+
+module load python3/3.10.4
+source ~/venv/bin/activate  # Or conda activate your_env_name
+
+python p3CNN.py
+

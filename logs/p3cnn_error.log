@@ -1,0 +1,12 @@
+/var/spool/sge/scc-204/job_scripts/3205180: line 13: module: command not found
+/var/spool/sge/scc-204/job_scripts/3205180: line 14: /usr4/dl4ds/bwong/venv/bin/activate: No such file or directory
+Traceback (most recent call last):
+  File "p3CNN.py", line 1, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+/var/spool/sge/scc-202/job_scripts/3206987: line 13: module: command not found
+/var/spool/sge/scc-202/job_scripts/3206987: line 14: /usr4/dl4ds/bwong/venv/bin/activate: No such file or directory
+Traceback (most recent call last):
+  File "p3CNN.py", line 1, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
