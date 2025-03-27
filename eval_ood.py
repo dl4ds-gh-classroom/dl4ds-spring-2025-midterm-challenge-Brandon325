@@ -42,13 +42,13 @@ def evaluate_ood(model, distortion_name, severity, CONFIG):
     # CHANGED: Ensure images are in uint8 format
     images = images.astype(np.uint8)
     
-    # CHANGED: Define a transform pipeline matching the DenseNet121 test transform.
+    # Define transform pipeline matching exactly with p3CNNDenseNet.py test transform
     ood_transform = transforms.Compose([
-        transforms.Resize(256),              # Same as transform_test in your training code
-        transforms.CenterCrop(224),          # Same as transform_test in your training code
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
         transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406),  # ImageNet normalization
-                             (0.229, 0.224, 0.225))
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                           std=[0.229, 0.224, 0.225]),
     ])
     
     # Create the dataset and DataLoader using the custom dataset.

@@ -9,6 +9,7 @@ import pandas as pd
 from tqdm.auto import tqdm  # For progress bars
 import wandb
 from utils import find_optimal_batch_size  # Optional: for batch size tuning
+from torchvision.transforms import RandomErasing, RandAugment
 
 ################################################################################
 # Model Definition: Pretrained DenseNet121 for CIFAR-100
@@ -26,9 +27,9 @@ class PretrainedDenseNet121(nn.Module):
         return self.model(x)
 
 ################################################################################
-# Mixup Functions for Data Augmentation
+# Advanced Data Augmentation Functions 
 ################################################################################
-def mixup_data(x, y, alpha=1.0, device='cpu'):
+def mixup_data(x, y, alpha=0.4, device='cpu'):
     if alpha > 0:
         lam = np.random.beta(alpha, alpha)
     else:
@@ -39,11 +40,42 @@ def mixup_data(x, y, alpha=1.0, device='cpu'):
     y_a, y_b = y, y[index]
     return mixed_x, y_a, y_b, lam
 
+def cutmix_data(x, y, alpha=1.0, device='cpu'):
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 1.0
+    batch_size = x.size()[0]
+    index = torch.randperm(batch_size).to(device)
+    
+    bbx1, bby1, bbx2, bby2 = rand_bbox(x.size(), lam)
+    x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
+    lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.size()[-1] * x.size()[-2]))
+    y_a, y_b = y, y[index]
+    return x, y_a, y_b, lam
+
+def rand_bbox(size, lam):
+    W = size[2]
+    H = size[3]
+    cut_rat = np.sqrt(1. - lam)
+    cut_w = int(W * cut_rat)
+    cut_h = int(H * cut_rat)
+
+    cx = np.random.randint(W)
+    cy = np.random.randint(H)
+
+    bbx1 = np.clip(cx - cut_w // 2, 0, W)
+    bby1 = np.clip(cy - cut_h // 2, 0, H)
+    bbx2 = np.clip(cx + cut_w // 2, 0, W)
+    bby2 = np.clip(cy + cut_h // 2, 0, H)
+
+    return bbx1, bby1, bbx2, bby2
+
 def mixup_criterion(criterion, pred, y_a, y_b, lam):
     return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
 
 ################################################################################
-# One Epoch Training Function with Mixup and Cosine Annealing Warm Restarts
+# One Epoch Training Function with Advanced Augmentation
 ################################################################################
 def train(epoch, model, trainloader, optimizer, criterion, scheduler, CONFIG):
     device = CONFIG["device"]
@@ -56,21 +88,27 @@ def train(epoch, model, trainloader, optimizer, criterion, scheduler, CONFIG):
     for i, (inputs, labels) in enumerate(progress_bar):
         inputs, labels = inputs.to(device), labels.to(device)
         
-        # Apply mixup augmentation
-        inputs, targets_a, targets_b, lam = mixup_data(inputs, labels, alpha=1.0, device=device)
+        # Randomly choose between Mixup and CutMix
+        if np.random.random() < 0.5:
+            inputs, targets_a, targets_b, lam = mixup_data(inputs, labels, alpha=1.0, device=device)
+        else:
+            inputs, targets_a, targets_b, lam = cutmix_data(inputs, labels, alpha=1.0, device=device)
         
         optimizer.zero_grad()
         outputs = model(inputs)
         loss = mixup_criterion(criterion, outputs, targets_a, targets_b, lam)
         loss.backward()
+        
+        # Gradient clipping
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        
         optimizer.step()
         
         running_loss += loss.item()
         _, predicted = outputs.max(1)
         total += labels.size(0)
-        correct += predicted.eq(labels).sum().item()  # Note: mixup makes training accuracy less interpretable.
+        correct += predicted.eq(labels).sum().item()
         
-        # Update scheduler per batch using current progress.
         current_step = epoch + (i + 1) / len(trainloader)
         scheduler.step(current_step)
         
@@ -117,9 +155,9 @@ def validate(model, valloader, criterion, device):
 def main():
     CONFIG = {
         "model": "PretrainedDenseNet121",
-        "batch_size": 32,
+        "batch_size": 16,
         "learning_rate": 0.001,
-        "epochs": 25,
+        "epochs": 45,
         "num_workers": 4,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
         "data_dir": "./data",
@@ -136,17 +174,18 @@ def main():
     np.random.seed(CONFIG["seed"])
     
     ############################################################################
-    # Data Transformations using ImageNet statistics
+    # Enhanced Data Transformations
     ############################################################################
-    # For training, we add standard augmentation and normalization.
     transform_train = transforms.Compose([
         transforms.Resize(256),
-        transforms.RandomResizedCrop(224),
+        transforms.RandomResizedCrop(224, scale=(0.08, 1.0)),
         transforms.RandomHorizontalFlip(),
-        # Optionally, you can add AutoAugment or RandAugment here.
+        transforms.RandomRotation(15),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225]),
+                           std=[0.229, 0.224, 0.225]),
+        RandomErasing(p=0.2),
     ])
     
     transform_test = transforms.Compose([
@@ -154,7 +193,7 @@ def main():
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225]),
+                           std=[0.229, 0.224, 0.225]),
     ])
     
     # Load CIFAR-100 datasets
@@ -201,11 +240,22 @@ def main():
     print("\nModel Summary:")
     print(model)
     
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=CONFIG["learning_rate"],
-                          momentum=0.9, weight_decay=1e-4)
-    # Use CosineAnnealingWarmRestarts scheduler (proven effective on CIFAR)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=2)
+    # Label smoothing for better generalization
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    
+    # Use AdamW optimizer with weight decay
+    optimizer = optim.AdamW(model.parameters(), lr=CONFIG["learning_rate"],
+                           weight_decay=0.01)
+    
+    # OneCycleLR scheduler for better convergence
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=CONFIG["learning_rate"],
+        epochs=CONFIG["epochs"],
+        steps_per_epoch=len(trainloader),
+        pct_start=0.3,
+        anneal_strategy='cos'
+    )
     
     ############################################################################
     # Initialize Weights & Biases (WandB)
